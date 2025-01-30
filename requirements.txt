@@ -5,3 +5,4 @@ uvicorn
 gunicorn
 requests
 beautifulsoup4
+redis
