@@ -4,7 +4,6 @@ import logging
 from typing import List
 
 from fastapi import FastAPI, HTTPException, Request, Response
-from pydantic import HttpUrl
 from schemas.request import PredictionRequest, PredictionResponse
 from sentence_transformers import SentenceTransformer
 

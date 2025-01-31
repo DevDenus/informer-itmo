@@ -50,7 +50,7 @@ class LLMResponseGenerator:
             if match:
                 answer = match.group(1)
 
-        reasoning = response_data.get("reasoning", "").strip()
+        reasoning = response_data.get("reasoning", "").strip() + "\nModel: mistral-7b-instruct-v0.3-bnb-4bit"
 
         sources = response_data.get("sources", [])
 
@@ -74,7 +74,9 @@ class LLMResponseGenerator:
         print(f"Енкодинг занял: {time.time() - start_time:.4f} сек")
         retrieved_docs = self.db.search(query_embedding, top_k=top_k)
 
-        context = "\n\n".join([f"{doc['title']} ({doc['url']}): {doc['content']}" for doc in retrieved_docs])[:4096]
+        context = "\n\n".join([f"{doc['title']} ({doc['url']}): {doc['content']}" for doc in retrieved_docs][::-1])
+        if len(context) > 4097:
+            context = context[-4096:] # двигаем более близкий контекст к началу генерации
 
         response_format = """{
             "answer": {Номер ответа, если нет правильного - -1},

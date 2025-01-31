@@ -50,7 +50,6 @@ class ITMONewsCrawler:
             response = requests.get(section_url)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
-            seen_visited_pages = False
 
             news_links = []
             section_elements = soup.find('div', class_='contentbox').find('ul').find_all('li')
@@ -61,20 +60,20 @@ class ITMONewsCrawler:
                     if full_link not in self.visited_urls:
                         news_links.append(full_link)
                     else:
-                        seen_visited_pages = True
+                        break
 
-            if not seen_visited_pages:
-                prev_next_action_urls = soup.find('div', class_='pagination').find_all('a')
-                if len(prev_next_action_urls) > 1 and len(news_links) < 500:
-                    next_section_url = urljoin(section_url, prev_next_action_urls[1].get('href'))
-                    if next_section_url == section_url:
-                        return news_links
-                    print(f'Visiting next section page: {next_section_url}')
-                    time.sleep(self.delay)
-                    try:
-                        news_links += self.get_news_links(next_section_url)
-                    except Exception as e:
-                        print(f'Limit exceed: {e}')
+            prev_next_action_urls = soup.find('div', class_='pagination').find_all('a')
+            if len(prev_next_action_urls) > 1 and len(news_links) < 500:
+                next_section_url = urljoin(section_url, prev_next_action_urls[1].get('href'))
+                if next_section_url == section_url:
+                    return news_links
+                print(f'Visiting next section page: {next_section_url}')
+                time.sleep(self.delay)
+                try:
+                    news_links += self.get_news_links(next_section_url)
+                except Exception as e:
+                    print(f'Limit exceed: {e}')
+                    
             return news_links
 
         except Exception as e:
