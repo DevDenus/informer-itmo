@@ -8,3 +8,11 @@ beautifulsoup4
 redis
 faiss-cpu
 numpy
+torch
+transformers
+protobuf
+sentencepiece
+accelerate
+bitsandbytes
+ninja
+sentence_transformers

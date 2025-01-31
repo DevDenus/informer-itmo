@@ -4,7 +4,7 @@ from urllib.parse import urljoin
 import json
 import time
 
-from utils.database import RetrievalDatabase
+from src.database import RetrievalDatabase
 
 class ITMONewsCrawler:
     def __init__(self, base_url : str, db : RetrievalDatabase, encoder, delay : float = 1, storage_file : str = "processed_urls.json"):
@@ -62,10 +62,10 @@ class ITMONewsCrawler:
                         news_links.append(full_link)
                     else:
                         seen_visited_pages = True
-            seen_visited_pages = True
+
             if not seen_visited_pages:
                 prev_next_action_urls = soup.find('div', class_='pagination').find_all('a')
-                if len(prev_next_action_urls) > 1:
+                if len(prev_next_action_urls) > 1 and len(news_links) < 100:
                     next_section_url = urljoin(section_url, prev_next_action_urls[1].get('href'))
                     print(f'Visiting next section page: {next_section_url}')
                     time.sleep(self.delay)
@@ -76,7 +76,7 @@ class ITMONewsCrawler:
             print(f"Ошибка при сборе ссылок с раздела {section_url}: {e}")
             return []
 
-    def clean_news_content(self, raw_content : str) -> str:
+    def clean_news_content(self, raw_content : str) -> list[str]:
         """
         Очищает текст контента от ненужных строк, пробелов и лишних символов.
         """
@@ -84,9 +84,7 @@ class ITMONewsCrawler:
         cleaned_lines = [
             line.strip().lower() for line in lines if line.strip() and "К началу" not in line and "Фото: " not in line
         ]
-
-        cleaned_content = "\n".join(cleaned_lines)
-        return cleaned_content
+        return cleaned_lines
 
     def parse_news(self, url : str) -> str:
         try:
@@ -99,23 +97,25 @@ class ITMONewsCrawler:
             date_time = soup.find('div', class_='news-info-wrapper').find('time').get('datetime')
             content = soup.find('div', class_='content').get_text()
             clean_content = self.clean_news_content(content)
-            news_embedding = self.encoder.encode(title + " " + date_time + " " + clean_content)
 
-            news_data = {
-                'url': url,
-                'title': title,
-                'date_time': date_time,
-                'content': clean_content,
-                'embedding': news_embedding
-            }
+            news_data = []
+            for paragraph in clean_content:
+                embedding = self.encoder.encode(title + " " + date_time + " " + paragraph)
+                news_data.append({
+                    'url': url,
+                    'title': title,
+                    'date_time': date_time,
+                    'content': paragraph,
+                    'embedding': embedding
+                })
 
             return news_data
 
-        except Exception as e:
+        except ZeroDivisionError as e:
             return {'error': str(e), 'url': url}
 
     def crawl(self):
-        sections = [self.get_sections(self.base_url)[0]]
+        sections = self.get_sections(self.base_url)
 
         for section_url in sections:
             section_news = []
@@ -130,7 +130,7 @@ class ITMONewsCrawler:
                 print(f"Обрабатываю новость: {news_url}")
                 self.visited_urls.add(news_url)
                 news_data = self.parse_news(news_url)
-                section_news.append(news_data)
+                section_news += news_data
                 time.sleep(self.delay)
 
             if section_news:
@@ -138,17 +138,18 @@ class ITMONewsCrawler:
                 self.db.save_index()
 
         self.save_processed_urls()
+        print(f"Всего новостей в базе: {len(self.visited_urls)}")
 
 
 if __name__ == '__main__':
     from sentence_transformers import SentenceTransformer
 
-    encoder = SentenceTransformer("all-MiniLM-L6-v2")
+    encoder = SentenceTransformer("intfloat/multilingual-e5-large", device='cuda')
 
-    db = RetrievalDatabase(dimension=384)
+    db = RetrievalDatabase(dimension=1024)
     BASE_URL = "https://news.itmo.ru/ru/"
     crawler = ITMONewsCrawler(BASE_URL, db, encoder)
-    #crawler.crawl()
+    crawler.crawl()
 
     query = "какие правила приёма абитуриентов в 2025 году?"
     querry_embed = encoder.encode(query).reshape(1, -1)

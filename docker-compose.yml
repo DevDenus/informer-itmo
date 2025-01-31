@@ -1,18 +1,28 @@
 version: "3.8"
 
 services:
+  redis:
+    image: redis:latest
+    container_name: redis_db
+    restart: always
+    ports:
+      - "6379:6379"
+
   fastapi-service:
+    image: itmo-informer:latest
     build: .
-    container_name: fastapi-baseline
+    container_name: itmo-informer
     ports:
       - "8080:8080"
-    restart: unless-stopped
+    restart: always
     environment:
       - TZ=UTC
     volumes:
       - ./logs:/app/logs
+      - ./src:/app/src
+    depends_on:
+      - redis
 
-    runtime: nvidia
     deploy:
      resources:
        reservations:

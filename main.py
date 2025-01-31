@@ -1,28 +1,56 @@
 import time
+import asyncio
+import logging
 from typing import List
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import HttpUrl
 from schemas.request import PredictionRequest, PredictionResponse
-from utils.logger import setup_logger
+from sentence_transformers import SentenceTransformer
 
-# Initialize
+from src.crawler import ITMONewsCrawler
+from src.database import RetrievalDatabase
+from src.informer import LLMResponseGenerator
+from src.utils.logger import setup_logger
+from schemas.request import PredictionResponse
+
+BASE_URL = "https://news.itmo.ru/ru/"
+
 app = FastAPI()
-logger = None
+logger = logging.getLogger(__name__)
+
+db = RetrievalDatabase(dimension=1024)
+encoder = SentenceTransformer("intfloat/multilingual-e5-large", device='cuda')
+crawler = ITMONewsCrawler(BASE_URL, db, encoder, 0.5)
+generator = LLMResponseGenerator(db, encoder)
+
+async def run_crawler_periodically(interval_minutes: int = 60):
+    while True:
+        logger.info("Запускаем краулер для обновления базы...")
+        start_time = time.time()
+
+        try:
+            crawler.crawl()
+            logger.info(f"Краулер успешно обновил данные за {time.time() - start_time:.2f} секунд.")
+        except Exception as e:
+            logger.error(f"Ошибка при работе краулера: {e}")
+
+        logger.info(f"Ожидаем {interval_minutes} минут до следующего запуска...")
+        await asyncio.sleep(interval_minutes * 60)
 
 
 @app.on_event("startup")
 async def startup_event():
     global logger
     logger = await setup_logger()
-
+    #asyncio.create_task(run_crawler_periodically(60))
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = time.time()
 
     body = await request.body()
-    await logger.info(
+    logger.info(
         f"Incoming request: {request.method} {request.url}\n"
         f"Request body: {body.decode()}"
     )
@@ -52,26 +80,21 @@ async def log_requests(request: Request, call_next):
 @app.post("/api/request", response_model=PredictionResponse)
 async def predict(body: PredictionRequest):
     try:
-        await logger.info(f"Processing prediction request with id: {body.id}")
-        # Здесь будет вызов вашей модели
-        answer = 1  # Замените на реальный вызов модели
-        sources: List[HttpUrl] = [
-            HttpUrl("https://itmo.ru/ru/"),
-            HttpUrl("https://abit.itmo.ru/"),
-        ]
+        #logger.info(f"Processing prediction request with id: {body.id}")
+        result = generator.generate_response(body.query, 10)
 
         response = PredictionResponse(
             id=body.id,
-            answer=answer,
-            reasoning="Из информации на сайте",
-            sources=sources,
+            answer=str(result['answer']),
+            reasoning=result['reasoning'],
+            sources=result['sources'],
         )
-        await logger.info(f"Successfully processed request {body.id}")
+        logger.info(f"Successfully processed request {body.id}")
         return response
     except ValueError as e:
         error_msg = str(e)
-        await logger.error(f"Validation error for request {body.id}: {error_msg}")
+        logger.error(f"Validation error for request {body.id}: {error_msg}")
         raise HTTPException(status_code=400, detail=error_msg)
     except Exception as e:
-        await logger.error(f"Internal error processing request {body.id}: {str(e)}")
+        logger.error(f"Internal error processing request {body.id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
