@@ -65,11 +65,16 @@ class ITMONewsCrawler:
 
             if not seen_visited_pages:
                 prev_next_action_urls = soup.find('div', class_='pagination').find_all('a')
-                if len(prev_next_action_urls) > 1 and len(news_links) < 100:
+                if len(prev_next_action_urls) > 1 and len(news_links) < 500:
                     next_section_url = urljoin(section_url, prev_next_action_urls[1].get('href'))
+                    if next_section_url == section_url:
+                        return news_links
                     print(f'Visiting next section page: {next_section_url}')
                     time.sleep(self.delay)
-                    news_links += self.get_news_links(next_section_url)
+                    try:
+                        news_links += self.get_news_links(next_section_url)
+                    except Exception as e:
+                        print(f'Limit exceed: {e}')
             return news_links
 
         except Exception as e:
@@ -116,6 +121,7 @@ class ITMONewsCrawler:
 
     def crawl(self):
         sections = self.get_sections(self.base_url)
+        max_retries_exceed = False
 
         for section_url in sections:
             section_news = []
@@ -128,14 +134,22 @@ class ITMONewsCrawler:
 
             for news_url in news_links:
                 print(f"Обрабатываю новость: {news_url}")
-                self.visited_urls.add(news_url)
-                news_data = self.parse_news(news_url)
-                section_news += news_data
-                time.sleep(self.delay)
+                try:
+                    self.visited_urls.add(news_url)
+                    news_data = self.parse_news(news_url)
+                    section_news += news_data
+                    time.sleep(self.delay)
+                except Exception as e:
+                    max_retries_exceed = True
+                    print(f"max_retries exceed {e}")
+                    break
 
             if section_news:
                 self.db.insert_news(section_news)
                 self.db.save_index()
+
+            if max_retries_exceed:
+                break
 
         self.save_processed_urls()
         print(f"Всего новостей в базе: {len(self.visited_urls)}")

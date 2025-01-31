@@ -77,7 +77,7 @@ class LLMResponseGenerator:
         context = "\n\n".join([f"{doc['title']} ({doc['url']}): {doc['content']}" for doc in retrieved_docs])[:4096]
 
         response_format = """{
-            "answer": {Номер ответа},
+            "answer": {Номер ответа, если нет правильного - -1},
             "reasoning": {Кратко обоснуй ответ, тут нельзя использовать ссылки!},
             "sources": {список ссылок на используемые источники, не более 3х, если они вообще требуются}
         }"""

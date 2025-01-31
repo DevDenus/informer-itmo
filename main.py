@@ -43,7 +43,7 @@ async def run_crawler_periodically(interval_minutes: int = 60):
 async def startup_event():
     global logger
     logger = await setup_logger()
-    #asyncio.create_task(run_crawler_periodically(60))
+    asyncio.create_task(run_crawler_periodically(30))
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -81,7 +81,7 @@ async def log_requests(request: Request, call_next):
 async def predict(body: PredictionRequest):
     try:
         #logger.info(f"Processing prediction request with id: {body.id}")
-        result = generator.generate_response(body.query, 10)
+        result = generator.generate_response(body.query, 7)
 
         response = PredictionResponse(
             id=body.id,
